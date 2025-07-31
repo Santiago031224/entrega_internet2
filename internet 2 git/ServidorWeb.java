@@ -4,14 +4,15 @@ import java.util.*;
 
 public final class ServidorWeb {
     public static void main(String argv[]) throws Exception {
+        // Establece el número de puerto.
         int puerto = 6789;
 
         // Estableciendo el socket de escucha.
         ServerSocket socketdeEscucha = new ServerSocket(puerto);
-        System.out.println("Servidor Web escuchando en el puerto " + puerto);
 
         // Procesando las solicitudes HTTP en un ciclo infinito.
         while (true) {
+            // Escuchando las solicitudes de conexión TCP.
             Socket socketdeConexion = socketdeEscucha.accept();
 
             // Construye un objeto para procesar el mensaje de solicitud HTTP.
@@ -30,8 +31,8 @@ final class SolicitudHttp implements Runnable {
     final static String CRLF = "\r\n";
     Socket socket;
 
-    // Constructor para recibir el socket.
-    public SolicitudHttp(Socket socket) {
+    // Constructor
+    public SolicitudHttp(Socket socket) throws Exception {
         this.socket = socket;
     }
 
@@ -45,61 +46,68 @@ final class SolicitudHttp implements Runnable {
     }
 
     private void proceseSolicitud() throws Exception {
+        // Referencia al stream de salida del socket.
         DataOutputStream os = new DataOutputStream(socket.getOutputStream());
-        BufferedReader br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-        // Recoge la línea de solicitud HTTP.
+        // Referencia y filtros para el stream de entrada.
+        InputStream is = socket.getInputStream();
+        BufferedReader br = new BufferedReader(new InputStreamReader(is));
+
+        // Recoge la línea de solicitud HTTP del mensaje.
         String lineaDeSolicitud = br.readLine();
+
+        // Muestra la línea de solicitud en la pantalla.
         System.out.println();
         System.out.println(lineaDeSolicitud);
 
-        // Recoge y muestra las líneas del header.
-        String lineaDelHeader;
+        // Recoge y muestra las líneas de header.
+        String lineaDelHeader = null;
         while ((lineaDelHeader = br.readLine()).length() != 0) {
             System.out.println(lineaDelHeader);
         }
 
-        // Extrae el nombre del archivo solicitado.
+        // Extrae el nombre del archivo de la línea de solicitud.
         StringTokenizer partesLinea = new StringTokenizer(lineaDeSolicitud);
-        partesLinea.nextToken(); // Ignora el método (por ejemplo, GET)
+        partesLinea.nextToken();  // Salta sobre el método (debe ser GET)
         String nombreArchivo = partesLinea.nextToken();
 
-        nombreArchivo = "." + nombreArchivo; // Prefijo para el directorio actual
+        // Anexa un ".", de tal forma que el archivo esté en el directorio actual.
+        nombreArchivo = "." + nombreArchivo;
 
+        // Abre el archivo seleccionado.
         FileInputStream fis = null;
         boolean existeArchivo = true;
-
         try {
             fis = new FileInputStream(nombreArchivo);
         } catch (FileNotFoundException e) {
             existeArchivo = false;
         }
 
-        String lineaDeEstado;
-        String lineaDeTipoContenido;
+        // Construye el mensaje de respuesta.
+        String lineaDeEstado = null;
+        String lineaDeTipoContenido = null;
         String cuerpoMensaje = null;
-
         if (existeArchivo) {
-            lineaDeEstado = "200 OK" + CRLF;
-            lineaDeTipoContenido = "Content-Type: " + contentType(nombreArchivo) + CRLF;
+            lineaDeEstado = "HTTP/1.0 200 OK" + CRLF;
+            lineaDeTipoContenido = "Content-type: " + contentType(nombreArchivo) + CRLF;
         } else {
-            lineaDeEstado = "404 Not Found" + CRLF;
-            lineaDeTipoContenido = "Content-Type: text/html" + CRLF;
-            cuerpoMensaje = "<HTML>" +
-                            "<HEAD><TITLE>404 Not Found</TITLE></HEAD>" +
-                            "<BODY><b>404</b> Not Found</BODY></HTML>";
+            lineaDeEstado = "HTTP/1.0 404 Not Found" + CRLF;
+            lineaDeTipoContenido = "Content-type: text/html" + CRLF;
+            cuerpoMensaje = "<HTML>" + 
+                "<HEAD><TITLE>404 Not Found</TITLE></HEAD>" +
+                "<BODY><b>404</b> Not Found</BODY></HTML>";
         }
 
-        // Enviar la línea de estado
+        // Envia la línea de estado.
         os.writeBytes(lineaDeEstado);
 
-        // Enviar el tipo de contenido
+        // Envía el contenido de la línea content-type.
         os.writeBytes(lineaDeTipoContenido);
 
-        // Línea en blanco para indicar fin del header
+        // Envía una línea en blanco para indicar el final de las líneas de header.
         os.writeBytes(CRLF);
 
-        // Enviar cuerpo del mensaje
+        // Envía el cuerpo del mensaje.
         if (existeArchivo) {
             enviarBytes(fis, os);
             fis.close();
@@ -107,15 +115,18 @@ final class SolicitudHttp implements Runnable {
             os.writeBytes(cuerpoMensaje);
         }
 
+        // Cierra los streams y el socket.
         os.close();
         br.close();
         socket.close();
     }
 
     private static void enviarBytes(FileInputStream fis, OutputStream os) throws Exception {
+
         byte[] buffer = new byte[1024];
         int bytes = 0;
 
+        // Copia el archivo solicitado hacia el output stream del socket.
         while ((bytes = fis.read(buffer)) != -1) {
             os.write(buffer, 0, bytes);
         }
@@ -125,18 +136,13 @@ final class SolicitudHttp implements Runnable {
         if (nombreArchivo.endsWith(".htm") || nombreArchivo.endsWith(".html")) {
             return "text/html";
         }
-        if (nombreArchivo.endsWith(".jpg") || nombreArchivo.endsWith(".jpeg")) {
-            return "image/jpeg";
-        }
         if (nombreArchivo.endsWith(".gif")) {
             return "image/gif";
         }
         if (nombreArchivo.endsWith(".png")) {
             return "image/png";
         }
-        if (nombreArchivo.endsWith(".css")) {
-            return "text/css";
-        }
+
         if (nombreArchivo.endsWith(".js")) {
             return "application/javascript";
         }
